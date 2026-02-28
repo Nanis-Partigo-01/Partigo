@@ -1,30 +1,29 @@
-import React, { useState, useRef } from "react";
-import { 
-  View, 
-  Text, 
-  Pressable, 
-  Animated, 
-  StyleSheet, 
-  Dimensions, 
-  TouchableWithoutFeedback 
-} from "react-native";
-import { BlurView } from "expo-blur";
 import { Ionicons, MaterialIcons } from "@expo/vector-icons";
 import { BottomTabBarProps } from "@react-navigation/bottom-tabs";
-import { COLORS } from "@/Constants/colors";
+import { BlurView } from "expo-blur";
 import { useRouter } from "expo-router";
+import React, { useRef, useState } from "react";
+import {
+  Animated,
+  Dimensions,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  TouchableWithoutFeedback,
+  View,
+} from "react-native";
 
 const { width, height } = Dimensions.get("window");
 
-// Create an Animated version of BlurView to handle the fade-in
+// Create an Animated version of BlurView to handle the fade in/out smoothly
 const AnimatedBlurView = Animated.createAnimatedComponent(BlurView);
 
+// Hardcoded tabs we want to show on the bottom bar
 const tabs = [
   { name: "index", icon: "home", label: "Home" },
+  { name: "CreateTicket", icon: "add", label: "" },
   { name: "TicketBank", icon: "receipt", label: "Tickets" },
-  { name: "CreateTicket", icon: "add", label: "" }, 
-  { name: "TopRanked", icon: "trophy", label: "Top Ranked" },
-  { name: "about", icon: "information-circle", label: "About" },
 ];
 
 export default function CustomTabBar({ state, navigation }: BottomTabBarProps) {
@@ -42,106 +41,128 @@ export default function CustomTabBar({ state, navigation }: BottomTabBarProps) {
     setExpanded(!expanded);
   };
 
-  // Rotation for the + to X
+  // Rotation for the + becoming an X
   const rotation = animation.interpolate({
     inputRange: [0, 1],
     outputRange: ["0deg", "45deg"],
   });
 
-  // Blur and Overlay Fade
+  // Blur and Overlay Fade (Opacity)
   const backdropOpacity = animation.interpolate({
     inputRange: [0, 1],
     outputRange: [0, 1],
   });
 
-  // Popout visibility
+  // Popout visibility & bounce
   const popoutOpacity = animation.interpolate({
-    inputRange: [0, 0.7, 1], 
+    inputRange: [0, 0.5, 1],
     outputRange: [0, 0, 1],
   });
 
   const translateY = animation.interpolate({
     inputRange: [0, 1],
-    outputRange: [0, -110], 
+    outputRange: [0, -100],
   });
 
   const translateXGeneral = animation.interpolate({
     inputRange: [0, 1],
-    outputRange: [0, -80],
+    outputRange: [0, -70],
   });
 
   const translateXSpecific = animation.interpolate({
     inputRange: [0, 1],
-    outputRange: [0, 80],
+    outputRange: [0, 70],
   });
+
+  // Get the actual active route name from React Navigation state
+  const currentRouteName = state.routes[state.index].name;
 
   return (
     <>
-      {/* 1. ANIMATED BLUR BACKDROP */}
-      {expanded && (
-        <TouchableWithoutFeedback onPress={toggleMenu}>
-          <AnimatedBlurView
-            intensity={30} // Depth of blur
-            tint="dark"    // Darkens the background
-            style={[
-              styles.blurOverlay,
-              { opacity: backdropOpacity }
-            ]}
-          />
-        </TouchableWithoutFeedback>
-      )}
+      {/* 1. ANIMATED BLUR BACKDROP (Always rendered to allow fade-out) */}
+      <TouchableWithoutFeedback onPress={expanded ? toggleMenu : undefined}>
+        <AnimatedBlurView
+          pointerEvents={expanded ? "auto" : "none"}
+          intensity={30}
+          tint="dark"
+          style={[styles.blurOverlay, { opacity: backdropOpacity }]}
+        />
+      </TouchableWithoutFeedback>
 
       {/* 2. TAB BAR CONTAINER */}
       <View style={styles.tabBarContainer}>
         <View style={styles.innerRow}>
-          {tabs.map((tab, index) => {
-            const isFocused = state.index === index;
+          {tabs.map((tab) => {
+            // Check if this specific tab is the active one
+            const isFocused = currentRouteName === tab.name;
 
             if (tab.name === "CreateTicket") {
               return (
                 <View key={tab.name} style={styles.centerButtonContainer}>
-                  
-                  {/* GENERAL OPTION */}
-                  <Animated.View 
+                  {/* GENERAL OPTION (Left Popout) */}
+                  <Animated.View
                     pointerEvents={expanded ? "auto" : "none"}
-                    style={[styles.popoutWrapper, { 
-                      transform: [{ translateY }, { translateX: translateXGeneral }],
-                      opacity: popoutOpacity 
-                  }]}>
-                    <Pressable 
-                      onPress={() => { toggleMenu();
-                        router.push("/CreateTicketModal");
-                        }}
+                    style={[
+                      styles.popoutWrapper,
+                      {
+                        transform: [
+                          { translateY },
+                          { translateX: translateXGeneral },
+                        ],
+                        opacity: popoutOpacity,
+                      },
+                    ]}
+                  >
+                    <Pressable
+                      onPress={() => {
+                        toggleMenu();
+                        router.push("/(modals)/CreateTicketModal");
+                      }}
                       style={styles.popoutCircle}
                     >
-                      <MaterialIcons name="category" size={26} color="white" />
+                      <MaterialIcons name="category" size={24} color="white" />
                     </Pressable>
                     <Text style={styles.popoutLabel}>General</Text>
                   </Animated.View>
 
-                  {/* SPECIFIC OPTION */}
-                  <Animated.View 
+                  {/* SPECIFIC OPTION (Right Popout) */}
+                  <Animated.View
                     pointerEvents={expanded ? "auto" : "none"}
-                    style={[styles.popoutWrapper, { 
-                      transform: [{ translateY }, { translateX: translateXSpecific }],
-                      opacity: popoutOpacity 
-                  }]}>
-                    <Pressable 
-                      onPress={() => { toggleMenu(); }}
+                    style={[
+                      styles.popoutWrapper,
+                      {
+                        transform: [
+                          { translateY },
+                          { translateX: translateXSpecific },
+                        ],
+                        opacity: popoutOpacity,
+                      },
+                    ]}
+                  >
+                    <Pressable
+                      onPress={() => {
+                        toggleMenu();
+                        // Add your specific route here if needed
+                      }}
                       style={styles.popoutCircle}
                     >
-                      <MaterialIcons name="work" size={26} color="white" />
+                      <MaterialIcons name="work" size={24} color="white" />
                     </Pressable>
                     <Text style={styles.popoutLabel}>Specific</Text>
                   </Animated.View>
 
-                  {/* MAIN ACTION BUTTON */}
+                  {/* MAIN ACTION BUTTON (+) */}
                   <View style={styles.anchor}>
-                      <Animated.View style={{ transform: [{ rotate: rotation }] }}>
-                          <Pressable onPress={toggleMenu} style={styles.mainActionButton}>
-                              <Ionicons name="add" size={32} color="white" />
-                          </Pressable>
-                      </Animated.View>
+                    <Animated.View
+                      style={{ transform: [{ rotate: rotation }] }}
+                    >
+                      <Pressable
+                        onPress={toggleMenu}
+                        style={styles.mainActionButton}
+                      >
+                        <Ionicons name="add" size={32} color="white" />
+                      </Pressable>
+                    </Animated.View>
                   </View>
                 </View>
               );
@@ -150,18 +171,23 @@ export default function CustomTabBar({ state, navigation }: BottomTabBarProps) {
             return (
               <Pressable
                 key={tab.name}
-                onPress={() => { 
-                  if(expanded) toggleMenu(); 
-                  navigation.navigate(tab.name); 
+                onPress={() => {
+                  if (expanded) toggleMenu(); // Close menu if clicking another tab
+                  navigation.navigate(tab.name);
                 }}
                 style={styles.tabItem}
               >
                 <Ionicons
                   name={tab.icon as any}
                   size={24}
-                  color={isFocused ? COLORS.primaryColor : "#9CA3AF"}
+                  color={isFocused ? "#1FA2A6" : "#9CA3AF"}
                 />
-                <Text style={[styles.tabText, { color: isFocused ? COLORS.primaryColor : "#999" }]}>
+                <Text
+                  style={[
+                    styles.tabText,
+                    { color: isFocused ? "#1FA2A6" : "#9CA3AF" },
+                  ]}
+                >
                   {tab.label}
                 </Text>
               </Pressable>
@@ -175,19 +201,24 @@ export default function CustomTabBar({ state, navigation }: BottomTabBarProps) {
 
 const styles = StyleSheet.create({
   blurOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    height: height, // Ensures blur covers the full screen above the tab bar
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: height, // Forces it to cover the entire screen upwards
     zIndex: 80,
   },
   tabBarContainer: {
     position: "absolute",
-    bottom: 0, left: 0, right: 0,
+    bottom: 0,
+    left: 0,
+    right: 0,
     backgroundColor: "white",
     borderTopLeftRadius: 30,
     borderTopRightRadius: 30,
     paddingTop: 12,
-    paddingBottom: 25,
-    elevation: 30, // Keep tab bar on top of blur
+    paddingBottom: Platform.OS === "ios" ? 30 : 20, // Adjust for iOS home indicator
+    elevation: 30,
     zIndex: 100,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: -5 },
@@ -196,8 +227,9 @@ const styles = StyleSheet.create({
   },
   innerRow: {
     flexDirection: "row",
-    justifyContent: "space-around",
+    justifyContent: "space-between", // Spread evenly
     alignItems: "center",
+    paddingHorizontal: 20,
   },
   tabItem: {
     alignItems: "center",
@@ -207,7 +239,7 @@ const styles = StyleSheet.create({
   tabText: {
     marginTop: 4,
     fontSize: 11,
-    fontWeight: "600",
+    fontWeight: "700",
   },
   centerButtonContainer: {
     flex: 1,
@@ -215,46 +247,54 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   anchor: {
-    width: 64,
-    height: 64,
+    width: 60,
+    height: 60,
     justifyContent: "center",
     alignItems: "center",
-    marginTop: -45,
+    marginTop: -40, // Pulls the button up out of the bar
     zIndex: 120,
   },
   mainActionButton: {
-    width: 64,
-    height: 64,
-    backgroundColor: COLORS.primaryColor || "#1FA2A6",
-    borderRadius: 32,
+    width: 56,
+    height: 56,
+    backgroundColor: "#1FA2A6",
+    borderRadius: 28,
     justifyContent: "center",
     alignItems: "center",
     borderWidth: 4,
     borderColor: "white",
-    elevation: 15,
+    elevation: 8,
+    shadowColor: "#1FA2A6",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 5,
   },
   popoutWrapper: {
     position: "absolute",
     alignItems: "center",
-    top: -20,
+    top: -10, // Start slightly higher than the center button
     zIndex: 110,
   },
   popoutCircle: {
-    width: 58,
-    height: 58,
-    backgroundColor: COLORS.primaryColor || "#1FA2A6",
-    borderRadius: 29,
+    width: 50,
+    height: 50,
+    backgroundColor: "#1FA2A6",
+    borderRadius: 25,
     justifyContent: "center",
     alignItems: "center",
     elevation: 10,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
   },
   popoutLabel: {
     fontSize: 12,
-    fontWeight: "bold",
-    marginTop: 8,
+    fontWeight: "800",
+    marginTop: 6,
     color: "#FFFFFF",
-    textShadowColor: 'rgba(0, 0, 0, 0.5)',
+    textShadowColor: "rgba(0, 0, 0, 0.6)",
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 4,
-  }
+  },
 });

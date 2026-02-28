@@ -1,62 +1,89 @@
 import { useAuth } from "@/context/AuthContext";
-import {
-  AntDesign,
-  FontAwesome,
-  FontAwesome5,
-  MaterialIcons,
-} from "@expo/vector-icons";
+import { registerApi } from "@/utils/api/auth.api";
+import { AntDesign, FontAwesome, MaterialIcons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as Device from "expo-device";
 import { useRouter } from "expo-router";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
-  ActivityIndicator,
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-  SafeAreaView,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    KeyboardAvoidingView,
+    Platform,
+    SafeAreaView,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from "react-native";
-import { loginApi } from "../../utils/api/auth.api";
 
-export default function Login() {
+export default function Register() {
   // --- EXISTING LOGIC ---
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [loading, setLoading] = useState(false);
-
-  // New state for toggling password visibility
-  const [showPassword, setShowPassword] = useState(false);
-
   const router = useRouter();
   const { login } = useAuth();
 
-  const handleLogin = async () => {
-    if (!email || !password) {
-      return Alert.alert("Error", "Please enter email and password");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [name, setName] = useState("");
+  const [phoneNumber, setPhoneNumber] = useState("");
+  const [companyName, setCompanyName] = useState("");
+  const [deviceId, setDeviceId] = useState("");
+  const [role, setRole] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+
+  // Load role + device ID safely
+  useEffect(() => {
+    const init = async () => {
+      const storedRole = await AsyncStorage.getItem("role");
+      setRole(storedRole);
+
+      setDeviceId(
+        Device.deviceName || Device.osInternalBuildId || "unknown-device",
+      );
+    };
+
+    init();
+  }, []);
+
+  const handleRegister = async () => {
+    if (!email || !password || !name || !phoneNumber) {
+      return Alert.alert("Error", "Please fill all required fields");
+    }
+
+    if (!role) {
+      return Alert.alert("Error", "Role not found");
     }
 
     setLoading(true);
-    try {
-      const res = await loginApi({ email, password });
 
-      // Save JWT token
+    try {
+      const res = await registerApi({
+        email,
+        password,
+        name,
+        phoneNumber,
+        role,
+        companyName,
+        deviceId,
+      });
+
+      // Save auth globally
       await login(res.data.accessToken.accessToken);
 
       router.replace("/(tabs)/");
-    } catch (e: any) {
-      console.error(e);
-      Alert.alert("Error", e.response?.data?.message || "Login failed");
+    } catch (err: any) {
+      const msg = err.response?.data?.message;
+
+      Alert.alert(
+        "Error",
+        Array.isArray(msg) ? msg.join("\n") : msg || "Something went wrong",
+      );
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleSignUp = () => {
-    router.push("/(auth)/register");
   };
 
   // --- UI RENDER ---
@@ -73,40 +100,64 @@ export default function Login() {
           {/* 1. HEADER & LOGO */}
           <View style={styles.headerContainer}>
             <View style={styles.logoCircle}>
-              <FontAwesome5 name="utensils" size={32} color="#1FA2A6" />
+              <MaterialIcons name="restaurant-menu" size={40} color="#1FA2A6" />
               <Text style={styles.logoTextInside}>COOK</Text>
             </View>
             <Text style={styles.title}>PartTimeMatch</Text>
             <View style={styles.subtitleRow}>
-              <Text style={styles.subtitleText}>Don't have an account? </Text>
-              <TouchableOpacity onPress={handleSignUp}>
-                <Text style={styles.linkText}>Sign up</Text>
+              <Text style={styles.subtitleText}>Already have an account? </Text>
+              <TouchableOpacity onPress={() => router.push("/(auth)/login")}>
+                <Text style={styles.linkText}>Sign in</Text>
               </TouchableOpacity>
             </View>
           </View>
 
           {/* 2. FORM SECTION */}
           <View style={styles.formContainer}>
+            {/* Name Input */}
+            <View style={styles.inputWrapper}>
+              <TextInput
+                placeholder="Your name"
+                placeholderTextColor="#A0A0A0"
+                value={name}
+                onChangeText={setName}
+                style={styles.input}
+              />
+              {name.length > 2 && (
+                <View style={styles.checkIconContainer}>
+                  <FontAwesome name="check" size={10} color="#fff" />
+                </View>
+              )}
+            </View>
+
             {/* Email Input */}
             <View style={styles.inputWrapper}>
               <TextInput
-                placeholder="Email"
+                placeholder="Email address"
                 placeholderTextColor="#A0A0A0"
                 value={email}
                 onChangeText={setEmail}
-                autoCapitalize="none"
                 keyboardType="email-address"
+                autoCapitalize="none"
                 style={styles.input}
               />
-              {/* Show checkmark if email has text */}
-              {email.length > 5 && (
-                <FontAwesome
-                  name="check-circle"
-                  size={18}
-                  color="#ccc"
-                  style={styles.inputIcon}
-                />
+              {email.includes("@") && (
+                <View style={styles.checkIconContainer}>
+                  <FontAwesome name="check" size={10} color="#fff" />
+                </View>
               )}
+            </View>
+
+            {/* Phone Number Input */}
+            <View style={styles.inputWrapper}>
+              <TextInput
+                placeholder="Phone Number"
+                placeholderTextColor="#A0A0A0"
+                value={phoneNumber}
+                onChangeText={setPhoneNumber}
+                keyboardType="phone-pad"
+                style={styles.input}
+              />
             </View>
 
             {/* Password Input */}
@@ -114,47 +165,44 @@ export default function Login() {
               <TextInput
                 placeholder="Password"
                 placeholderTextColor="#A0A0A0"
-                secureTextEntry={!showPassword} // Toggles based on state
+                secureTextEntry={!showPassword}
                 value={password}
                 onChangeText={setPassword}
-                style={[styles.input, { paddingRight: 50 }]} // Add padding so text doesn't hit the eye icon
+                style={styles.input}
               />
-
-              {/* Eye Icon Button */}
               <TouchableOpacity
                 style={styles.eyeIcon}
                 onPress={() => setShowPassword(!showPassword)}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} // Makes it easier to tap
               >
                 <MaterialIcons
                   name={showPassword ? "visibility" : "visibility-off"}
-                  size={22}
+                  size={20}
                   color="#A0A0A0"
                 />
               </TouchableOpacity>
             </View>
 
-            <TouchableOpacity
-              onPress={() => router.push("/(auth)/forgotPassword")}
-              style={{ alignSelf: "flex-end", marginBottom: 20, marginTop: -8 }}
-            >
-              <Text
-                style={{ color: "#1FA2A6", fontWeight: "600", fontSize: 14 }}
-              >
-                Forgot Password?
-              </Text>
-            </TouchableOpacity>
+            {/* Company Name (Optional) */}
+            <View style={styles.inputWrapper}>
+              <TextInput
+                placeholder="Company Name (optional)"
+                placeholderTextColor="#A0A0A0"
+                value={companyName}
+                onChangeText={setCompanyName}
+                style={styles.input}
+              />
+            </View>
 
-            {/* Sign In Button */}
+            {/* Sign Up Button */}
             <TouchableOpacity
-              style={styles.loginButton}
-              onPress={handleLogin}
+              style={styles.registerButton}
+              onPress={handleRegister}
               disabled={loading}
             >
               {loading ? (
                 <ActivityIndicator color="#fff" />
               ) : (
-                <Text style={styles.loginButtonText}>Sign in</Text>
+                <Text style={styles.registerButtonText}>Sign Up</Text>
               )}
             </TouchableOpacity>
           </View>
@@ -170,9 +218,7 @@ export default function Login() {
           <View style={styles.socialContainer}>
             {/* Facebook */}
             <TouchableOpacity style={styles.socialButton}>
-              <View
-                style={[styles.socialIconCircle, { backgroundColor: "#fff" }]}
-              >
+              <View style={styles.socialIconCircle}>
                 <FontAwesome name="facebook" size={20} color="#1877F2" />
               </View>
               <Text style={styles.socialButtonText}>Connect with Facebook</Text>
@@ -180,9 +226,7 @@ export default function Login() {
 
             {/* Google */}
             <TouchableOpacity style={styles.socialButton}>
-              <View
-                style={[styles.socialIconCircle, { backgroundColor: "#fff" }]}
-              >
+              <View style={styles.socialIconCircle}>
                 <AntDesign name="google" size={20} color="#DB4437" />
               </View>
               <Text style={styles.socialButtonText}>Connect with Google</Text>
@@ -203,20 +247,20 @@ const styles = StyleSheet.create({
   scrollContainer: {
     flexGrow: 1,
     paddingHorizontal: 24,
-    justifyContent: "center",
+    // INCREASED padding to add space at the top
+    paddingTop: 80,
     paddingBottom: 40,
   },
   // Header
   headerContainer: {
     alignItems: "center",
     marginBottom: 32,
-    marginTop: 20,
   },
   logoCircle: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    backgroundColor: "#F4EFEA", // 'secondary-sand'
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: "rgba(31, 162, 166, 0.1)", // Primary with low opacity
     justifyContent: "center",
     alignItems: "center",
     marginBottom: 16,
@@ -224,12 +268,12 @@ const styles = StyleSheet.create({
   logoTextInside: {
     color: "#1FA2A6",
     fontWeight: "800",
-    fontSize: 20,
+    fontSize: 12,
     marginTop: 4,
-    letterSpacing: -1,
+    letterSpacing: 2,
   },
   title: {
-    fontSize: 24,
+    fontSize: 28,
     fontWeight: "bold",
     color: "#2E2E2E",
     marginBottom: 8,
@@ -245,7 +289,7 @@ const styles = StyleSheet.create({
   linkText: {
     fontSize: 14,
     color: "#1FA2A6",
-    fontWeight: "600",
+    fontWeight: "bold",
   },
   // Form
   formContainer: {
@@ -256,60 +300,62 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   input: {
-    backgroundColor: "#F7F8F9", // 'input-bg-light'
-    borderRadius: 16, // 'rounded-2xl'
+    backgroundColor: "#F4EFEA", // 'input-bg-light'
+    borderRadius: 12,
     paddingVertical: 16,
     paddingHorizontal: 20,
-    fontSize: 14,
+    fontSize: 15,
     color: "#2E2E2E",
   },
-  inputIcon: {
+  checkIconContainer: {
     position: "absolute",
     right: 16,
     top: 18,
+    backgroundColor: "#ccc",
+    borderRadius: 10,
+    width: 20,
+    height: 20,
+    justifyContent: "center",
+    alignItems: "center",
   },
-  // --- CORRECTED EYE ICON STYLE ---
   eyeIcon: {
     position: "absolute",
     right: 16,
-    top: 0, // Start from top
-    bottom: 0, // Stretch to bottom
-    justifyContent: "center", // Center content vertically
-    alignItems: "center",
-    zIndex: 1,
+    top: 16,
   },
-  loginButton: {
+  registerButton: {
     backgroundColor: "#1FA2A6", // 'primary'
-    borderRadius: 16,
+    borderRadius: 12,
     paddingVertical: 16,
     alignItems: "center",
     marginTop: 8,
     // Shadows
     shadowColor: "#1FA2A6",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.2,
+    shadowRadius: 20,
     elevation: 5,
   },
-  loginButtonText: {
+  registerButtonText: {
     color: "#fff",
     fontSize: 16,
-    fontWeight: "600",
+    fontWeight: "bold",
   },
   // Divider
   dividerContainer: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 32,
+    marginBottom: 24,
+    opacity: 0.6,
   },
   dividerLine: {
     flex: 1,
     height: 1,
-    backgroundColor: "#E5E7EB",
+    backgroundColor: "#D1D5DB",
   },
   dividerText: {
     marginHorizontal: 16,
-    color: "#9CA3AF",
+    color: "#6B7280",
     fontSize: 12,
     fontWeight: "600",
     letterSpacing: 1,
@@ -321,34 +367,33 @@ const styles = StyleSheet.create({
   socialButton: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#F7F8F9",
-    borderRadius: 16,
-    paddingVertical: 12,
+    backgroundColor: "#F4EFEA",
+    borderRadius: 12,
+    paddingVertical: 14,
     paddingHorizontal: 16,
   },
   socialIconCircle: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 24,
+    height: 24,
     justifyContent: "center",
     alignItems: "center",
-    marginRight: 12,
+    marginRight: 16,
   },
   socialButtonText: {
     flex: 1,
     textAlign: "center",
-    color: "#4B5563",
+    color: "#2E2E2E",
     fontSize: 14,
-    fontWeight: "500",
-    marginRight: 32,
+    fontWeight: "600",
+    marginRight: 24, // visual balance
   },
   // Footer
   bottomIndicator: {
-    width: 130,
-    height: 5,
+    width: 120,
+    height: 4,
     backgroundColor: "#E5E7EB",
-    borderRadius: 3,
+    borderRadius: 2,
     alignSelf: "center",
-    marginTop: 40,
+    marginTop: 30,
   },
 });

@@ -7,10 +7,12 @@
     "icon": "./assets/images/icon.png",
     "scheme": "jobgivermobile",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
+    "newArchEnabled": false,
+
     "ios": {
       "supportsTablet": true
     },
+
     "android": {
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
@@ -20,12 +22,15 @@
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "package": "com.anonymous.JobGiverMobile"
+      "package": "com.anonymous.JobGiverMobile",
+      "permissions": ["ACCESS_FINE_LOCATION", "ACCESS_COARSE_LOCATION"]
     },
+
     "web": {
       "output": "static",
       "favicon": "./assets/images/favicon.png"
     },
+
     "plugins": [
       "expo-router",
       [
@@ -39,8 +44,15 @@
             "backgroundColor": "#000000"
           }
         }
+      ],
+      [
+        "react-native-maps",
+        {
+          "googleMapsApiKey": "AIzaSyBh6ASDYqlt5ii-ia_h9eInbakAzRkVJb8"
+        }
       ]
     ],
+
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true

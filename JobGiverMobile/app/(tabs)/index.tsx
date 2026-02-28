@@ -1,124 +1,417 @@
-import React from "react";
-import { 
-  View, 
-  Dimensions, 
-  StyleSheet, 
-  TouchableWithoutFeedback, 
-  Keyboard, 
+import TicketCard, { TicketData } from "@/component/TicketCard";
+import { fetchNearbySeekersapi } from "@/utils/api/seekers.api";
+import { getMyTickets } from "@/utils/api/tickets.api";
+import * as Location from "expo-location";
+import { useFocusEffect, useRouter } from "expo-router";
+import { AlertCircle, ChevronRight, Clock, Plus } from "lucide-react-native";
+import React, { useCallback, useEffect, useState } from "react";
+import {
+  ActivityIndicator,
+  Dimensions,
+  Image,
   ScrollView,
-  ImageBackground
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
+import MapView, { Callout, Marker } from "react-native-maps";
 import { SafeAreaView } from "react-native-safe-area-context";
-import LocationSearch from "@/component/LocationSearch";
-import WorkerCard, { CARD_WIDTH } from "@/component/WorkerCard";
-
-/** * UNCOMMENT the lines below only after running:
- * npx expo run:android 
- * (Standard Expo Go does not support native maps)
- */
-import MapView, { PROVIDER_GOOGLE } from "react-native-maps"; 
-import { useRouter } from "expo-router";
 
 const { width } = Dimensions.get("window");
 
-const MOCK_WORKERS = [
-  { id: '1', name: 'Sarah M.', role: 'Cleaner', rating: '4.9', bio: 'Expert in deep cleaning and organizing. 5 years of experience.', img: 'https://randomuser.me/api/portraits/women/44.jpg' },
-  { id: '2', name: 'James L.', role: 'Plumber', rating: '4.7', bio: 'Available for emergency repairs and installations.', img: 'https://randomuser.me/api/portraits/men/32.jpg' },
-  { id: '3', name: 'Emma R.', role: 'Gardener', rating: '5.0', bio: 'Passionate about landscape design and organic gardening.', img: 'https://randomuser.me/api/portraits/women/65.jpg' },
-];
+type Seeker = {
+  name: string;
+  seekerId: string;
+  role: string;
+  bio: string;
+  rating: number;
+  distanceKm: number;
+  profileImage?: string | null;
+  latitude?: number; // Added to handle map markers
+  longitude?: number; // Added to handle map markers
+};
 
 export default function Home() {
-
   const router = useRouter();
-  return (
-    <View style={styles.container}>
-      {/* 1. BACKGROUND LAYER (Map or Mock Image) */}
-      <View style={StyleSheet.absoluteFillObject}>
-        {/* Using ImageBackground to avoid native module crashes in Expo Go */}
-        <ImageBackground
-          source={{ uri: "https://api.maptiler.com/maps/basic-v2/static/0,0,1/1000x1000.png?key=get_your_own_key" }} // Replace with a clean map screenshot URL
-          style={styles.mapMock}
-          resizeMode="cover"
-        >
-          {/* If you switch to MapView later, it goes here
-          <MapView style={StyleSheet.absoluteFillObject} provider={PROVIDER_GOOGLE} /> */}
-        </ImageBackground>
-      </View>
 
-      {/* 2. UI OVERLAY LAYER */}
-      <SafeAreaView style={styles.overlayContainer} pointerEvents="box-none">
-        
-        {/* Top Section: Search Bar */}
-        <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
-          <View style={styles.topSection} pointerEvents="box-none">
-            <LocationSearch />
+  const [currentLocation, setCurrentLocation] =
+    useState<Location.LocationObjectCoords | null>(null);
+  const [loadingSeekers, setLoadingSeekers] = useState(true);
+  const [loadingTicket, setLoadingTicket] = useState(true);
+  const [seekers, setSeekers] = useState<Seeker[]>([]);
+
+  // State for the Active Ticket
+  const [activeTicket, setActiveTicket] = useState<TicketData | null>(null);
+
+  // ---------------------------
+  // 1️⃣ Fetch Active Ticket on Screen Focus
+  // ---------------------------
+  useFocusEffect(
+    useCallback(() => {
+      fetchActiveTicket();
+    }, []),
+  );
+
+  const fetchActiveTicket = async () => {
+    setLoadingTicket(true);
+    try {
+      const allTickets = await getMyTickets();
+      const active = allTickets.find(
+        (t: any) =>
+          t.display_status === "Accepted" ||
+          t.display_status === "In Progress" ||
+          t.display_status === "Searching",
+      );
+
+      if (active) {
+        setActiveTicket({
+          id: active.id,
+          title: active.title,
+          display_status: active.display_status,
+          location: active.location || "Location pending...",
+        });
+      } else {
+        setActiveTicket(null);
+      }
+    } catch (error) {
+      console.error("Error fetching active ticket:", error);
+    } finally {
+      setLoadingTicket(false);
+    }
+  };
+
+  // ---------------------------
+  // 2️⃣ Get Current Location
+  // ---------------------------
+  useEffect(() => {
+    (async () => {
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== "granted") {
+          console.log("Permission to access location denied");
+          return;
+        }
+        const location = await Location.getCurrentPositionAsync({});
+        setCurrentLocation(location.coords);
+      } catch (error) {
+        console.error("Error getting location:", error);
+      }
+    })();
+  }, []);
+
+  // ---------------------------
+  // 3️⃣ Fetch Nearby Seekers
+  // ---------------------------
+  useEffect(() => {
+    if (currentLocation) {
+      fetchNearbySeekers(currentLocation.latitude, currentLocation.longitude);
+    }
+  }, [currentLocation]);
+
+  const fetchNearbySeekers = async (lat: number, lng: number) => {
+    setLoadingSeekers(true);
+    // Hardcoded for testing, remove or update later if using real device coords
+    lat = 12.8762;
+    lng = 74.8415;
+    try {
+      const data = await fetchNearbySeekersapi({ lat, lng });
+      if (Array.isArray(data)) {
+        setSeekers(data);
+      } else {
+        setSeekers([]);
+      }
+    } catch (error) {
+      console.error("Error fetching seekers:", error);
+      setSeekers([]);
+    } finally {
+      setLoadingSeekers(false);
+    }
+  };
+
+  // ---------------------------
+  // UI COMPONENTS
+  // ---------------------------
+
+  const renderCaseA = () => (
+    <View style={styles.section}>
+      <TouchableOpacity
+        style={styles.primaryCta}
+        onPress={() => router.push("/(modals)/CreateTicketModal")}
+      >
+        <View style={styles.primaryCtaContent}>
+          <View style={styles.ctaIconBg}>
+            <Plus color="#1FA2A6" size={24} />
           </View>
-        </TouchableWithoutFeedback>
-
-        {/* Bottom Section: Worker Carousel */}
-        <View style={styles.carouselContainer}>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            snapToInterval={CARD_WIDTH + 20} // Matches card width + gap
-            decelerationRate="fast"
-            contentContainerStyle={styles.scrollViewContent}
-          >
-             {/* Inside your Home component's ScrollView: */}
-          {MOCK_WORKERS.map((item) => (
-            <WorkerCard 
-              key={item.id} 
-              worker={item} 
-              onPress={() => {
-                router.push({
-                  pathname: "/WorkerProfile", // Ensure this matches your file name (about.tsx)
-                  params: { 
-                    id: item.id,
-                    name: item.name,
-                    role: item.role,
-                    img: item.img,
-                    rating: item.rating
-                  }
-                });
-              }}
-            />
-          ))}
-          </ScrollView>
+          <View style={{ flex: 1, marginLeft: 16 }}>
+            <Text style={styles.ctaTitle}>Create New Ticket</Text>
+            <Text style={styles.ctaSubtitle}>Find a worker instantly</Text>
+          </View>
+          <ChevronRight color="white" size={24} />
         </View>
+      </TouchableOpacity>
 
-      </SafeAreaView>
+      <Text style={styles.sectionTitle}>Quick Create</Text>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.templatesContainer}
+      >
+        {["House Cleaning", "Plumbing", "Gardening", "Electrical"].map(
+          (template, idx) => (
+            <TouchableOpacity key={idx} style={styles.templateChip}>
+              <Clock color="#4B5563" size={16} />
+              <Text style={styles.templateText}>{template}</Text>
+            </TouchableOpacity>
+          ),
+        )}
+      </ScrollView>
     </View>
+  );
+
+  if (loadingSeekers && loadingTicket) {
+    return (
+      <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+        <ActivityIndicator size="large" color="#1FA2A6" />
+      </View>
+    );
+  }
+
+  return (
+    <SafeAreaView style={styles.container} edges={["top"]}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        // INCREASED PADDING BOTTOM TO 120 SO IT CLEARS THE TAB BAR
+        contentContainerStyle={{ paddingBottom: 120, paddingTop: 16 }}
+      >
+        {/* 1. ACTIVE TICKET */}
+        {activeTicket && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Active Ticket</Text>
+            <TicketCard ticket={activeTicket} />
+          </View>
+        )}
+
+        {/* 2. CREATE TICKET & QUICK ACTIONS */}
+        {renderCaseA()}
+
+        {/* 3. MAP & NEARBY WORKERS SECTION */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionTitle}>Available Nearby</Text>
+            <TouchableOpacity onPress={() => fetchNearbySeekers(12.87, 74.84)}>
+              <Text style={styles.linkText}>Refresh</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Map Preview Block */}
+          <View style={styles.mapBlock}>
+            {seekers.length === 0 && !loadingSeekers && (
+              <View style={styles.emptyMapOverlay}>
+                <AlertCircle color="#6B7280" size={24} />
+                <Text
+                  style={{ marginTop: 8, color: "#4B5563", fontWeight: "500" }}
+                >
+                  No workers found nearby
+                </Text>
+              </View>
+            )}
+
+            <MapView
+              style={StyleSheet.absoluteFillObject}
+              initialRegion={{
+                latitude: currentLocation?.latitude || 12.8762,
+                longitude: currentLocation?.longitude || 74.8415,
+                latitudeDelta: 0.05, // Zoom level
+                longitudeDelta: 0.05,
+              }}
+            >
+              {/* Optional: Show User's Current Location Pin */}
+              {currentLocation && (
+                <Marker
+                  coordinate={{
+                    latitude: currentLocation.latitude,
+                    longitude: currentLocation.longitude,
+                  }}
+                  title="You are here"
+                  pinColor="blue"
+                />
+              )}
+
+              {/* Render Nearby Workers as Markers */}
+              {seekers.map((worker, index) => {
+                // Mocking coordinates near the user if your backend doesn't return lat/lng yet.
+                // Replace this with `worker.latitude` and `worker.longitude` once your API supports it.
+                const fallbackLat =
+                  (currentLocation?.latitude || 12.8762) +
+                  (Math.random() - 0.5) * 0.02;
+                const fallbackLng =
+                  (currentLocation?.longitude || 74.8415) +
+                  (Math.random() - 0.5) * 0.02;
+
+                return (
+                  <Marker
+                    key={worker.seekerId || index}
+                    coordinate={{
+                      latitude: worker.latitude || fallbackLat,
+                      longitude: worker.longitude || fallbackLng,
+                    }}
+                  >
+                    {/* Custom Image Pin */}
+                    <View style={styles.customMarker}>
+                      <Image
+                        source={{
+                          uri:
+                            worker.profileImage ||
+                            "https://via.placeholder.com/150",
+                        }}
+                        style={styles.markerImage}
+                      />
+                    </View>
+
+                    {/* Popup when clicking the marker */}
+                    <Callout
+                      tooltip
+                      onPress={() => {
+                        router.push({
+                          pathname: "/WorkerProfile",
+                          params: {
+                            id: worker.seekerId,
+                            name: worker.name,
+                            role: worker.role,
+                            img:
+                              worker.profileImage ||
+                              "https://via.placeholder.com/150",
+                            rating: worker.rating,
+                          },
+                        });
+                      }}
+                    >
+                      <View style={styles.calloutBubble}>
+                        <Text style={styles.calloutName}>{worker.name}</Text>
+                        <Text style={styles.calloutRole}>
+                          {worker.role} • ★ {worker.rating}
+                        </Text>
+                        <Text style={styles.calloutAction}>
+                          Tap to view profile
+                        </Text>
+                      </View>
+                    </Callout>
+                  </Marker>
+                );
+              })}
+            </MapView>
+          </View>
+        </View>
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F3F4F6',
+  container: { flex: 1, backgroundColor: "#F9FAFB" },
+  section: { paddingHorizontal: 20, marginBottom: 24 },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#111827",
+    marginBottom: 12,
   },
-  mapMock: {
-    width: '100%',
-    height: '100%',
-    opacity: 0.5, // Dims the map to make the UI pop
+  sectionHeaderRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 12,
   },
-  overlayContainer: {
+  linkText: { color: "#1FA2A6", fontWeight: "600" },
+
+  // Case A Styles
+  primaryCta: {
+    backgroundColor: "#1FA2A6",
+    borderRadius: 20,
+    padding: 20,
+    shadowColor: "#1FA2A6",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    elevation: 8,
+    marginBottom: 24,
+  },
+  primaryCtaContent: { flexDirection: "row", alignItems: "center" },
+  ctaIconBg: { backgroundColor: "white", padding: 12, borderRadius: 16 },
+  ctaTitle: { color: "white", fontSize: 18, fontWeight: "bold" },
+  ctaSubtitle: { color: "rgba(255,255,255,0.8)", fontSize: 13, marginTop: 4 },
+  templatesContainer: { flexDirection: "row", paddingBottom: 10 },
+  templateChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FFFFFF",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 12,
+    marginRight: 12,
+    borderWidth: 1,
+    borderColor: "#F3F4F6",
+  },
+  templateText: { marginLeft: 8, color: "#4B5563", fontWeight: "500" },
+
+  // Map Section
+  mapBlock: {
+    height: 380,
+    borderRadius: 24,
+    overflow: "hidden",
+    position: "relative",
+    backgroundColor: "#E5E7EB",
+  },
+  emptyMapOverlay: {
     ...StyleSheet.absoluteFillObject,
-    // pointerEvents="box-none" allows us to touch the map "through" this view
-  },
-  topSection: {
-    flex: 1,
-    zIndex: 5000, // Keeps search dropdown on top
-  },
-  carouselContainer: {
-    position: 'absolute',
-    bottom: 110, // Adjust based on your Tab Bar height
-    left: 0,
-    right: 0,
+    backgroundColor: "rgba(255,255,255,0.7)",
     zIndex: 10,
+    justifyContent: "center",
+    alignItems: "center",
   },
-  scrollViewContent: {
-    // This padding centers the first card on the screenF
-    paddingHorizontal: (width - CARD_WIDTH) / 2 - 10,
-    paddingBottom: 20,
+
+  // Custom Map Marker
+  customMarker: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "#1FA2A6",
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 3,
+    borderColor: "#FFFFFF",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 5,
   },
+  markerImage: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+  },
+
+  // Map Callout (Popup)
+  calloutBubble: {
+    backgroundColor: "white",
+    borderRadius: 12,
+    padding: 12,
+    width: 160,
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  calloutName: {
+    fontWeight: "bold",
+    fontSize: 14,
+    color: "#111827",
+    marginBottom: 2,
+  },
+  calloutRole: { fontSize: 12, color: "#4B5563", marginBottom: 6 },
+  calloutAction: { fontSize: 10, color: "#1FA2A6", fontWeight: "600" },
 });
